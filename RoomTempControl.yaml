@@ -39,13 +39,6 @@ blueprint:
           max: 100
           step: 0.1
           unit_of_measurement: "°F"
-    outdoor_temperature_sensor:
-      name: Outdoor Temperature Sensor (Optional)
-      description: Optional outdoor sensor; if provided, switch only turns ON if its reading ≤ Low Threshold.
-      selector:
-        entity:
-          domain: sensor
-          device_class: temperature
 
 trigger:
   - platform: numeric_state
