@@ -1,0 +1,75 @@
+blueprint:
+  name: Room Temperature Control
+  description: |
+    Control a smart plug switch based on indoor temperature sensor readings.
+    - Turns switch ON when indoor temperature > High Threshold.
+    - Turns switch OFF when indoor temperature < Low Threshold.
+  domain: automation
+  input:
+    temperature_sensor:
+      name: Indoor Temperature Sensor
+      description: The indoor temperature sensor entity (e.g., sensor.living_room_temp).
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    switch_entity:
+      name: Switch Entity
+      description: The smart plug switch to control (e.g., switch.bedroom_fan).
+      selector:
+        entity:
+          domain: switch
+    high_temperature:
+      name: High Temperature Threshold
+      description: Indoor temperature above which the switch turns ON (e.g., 75.5).
+      default: 75.5
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "°F"
+    low_temperature:
+      name: Low Temperature Threshold
+      description: Indoor temperature below which the switch turns OFF (e.g., 74).
+      default: 74
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "°F"
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input temperature_sensor
+    above: !input high_temperature
+    id: turn_on
+  - platform: numeric_state
+    entity_id: !input temperature_sensor
+    below: !input low_temperature
+    id: turn_off
+
+condition: []
+
+action:
+  - choose:
+      # Handle turn_on trigger
+      - conditions:
+          - condition: trigger
+            id: turn_on
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: !input switch_entity
+      # Handle turn_off trigger
+      - conditions:
+          - condition: trigger
+            id: turn_off
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input switch_entity
+    default: []
+
+mode: single
