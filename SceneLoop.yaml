@@ -73,9 +73,9 @@ sequence:
   - condition: state
     entity_id: !input running_toggle
     state: 'on'
-  - service: scene.turn_on
-    target:
-      entity_id: "{{ next_scene }}"
+  - service: script.{{ id }}_call
+  data:
+    next_scene: "{{ other_scene }}"
     data:
       transition: !input transition_duration
   - delay:
