@@ -1,0 +1,84 @@
+blueprint:
+  name: Alternating Scenes Looper
+  description: |
+    Creates a script to continuously alternate between two scenes.
+    - Applies the provided scene with transition.
+    - Waits the dwell time.
+    - Recursively calls itself with the other scene.
+    Use an input_boolean to enable/disable the loop (turn it ON to start, OFF to stop).
+  domain: script
+  input:
+    scene_one:
+      name: First Scene
+      description: The starting scene to alternate from (e.g., scene.living_room_bright).
+      selector:
+        entity:
+          domain: scene
+    scene_two:
+      name: Second Scene
+      description: The scene to alternate to (e.g., scene.living_room_dim).
+      selector:
+        entity:
+          domain: scene
+    transition_duration:
+      name: Transition Duration (seconds)
+      description: Time for scene transitions (e.g., 2 for smooth fade).
+      default: 1
+      selector:
+        number:
+          min: 0.1
+          max: 30
+          step: 0.1
+          unit_of_measurement: seconds
+    dwell_time:
+      name: Dwell Time (seconds)
+      description: How long to hold each scene before transitioning (e.g., 300 for 5 minutes).
+      default: 300
+      selector:
+        number:
+          min: 1
+          max: 3600
+          step: 1
+          unit_of_measurement: seconds
+    running_toggle:
+      name: Running Toggle
+      description: Input_boolean to control if the loop is active (must be ON to run).
+      default: input_boolean.sceen_loop
+      selector:
+        entity:
+          domain: input_boolean
+
+fields:
+  next_scene:
+    name: Next Scene
+    description: The scene entity_id to apply now (passed when calling the script).
+    example: scene.living_room_bright
+    required: true
+    selector:
+      entity:
+        domain: scene
+
+variables:
+  other_scene: >-
+    {% if next_scene == !input scene_one %}
+      !input scene_two
+    {% else %}
+      !input scene_one
+    {% endif %}
+
+sequence:
+  # Stop if toggle is OFF
+  - condition: state
+    entity_id: !input running_toggle
+    state: 'on'
+  - service: scene.turn_on
+    target:
+      entity_id: "{{ next_scene }}"
+    data:
+      transition: !input transition_duration
+  - delay:
+      seconds: !input dwell_time
+  # Recurse with the other scene
+  - service: script.{{ id }}
+    data:
+      next_scene: "{{ other_scene }}"
