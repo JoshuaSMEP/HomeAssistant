@@ -39,6 +39,14 @@ blueprint:
           max: 100
           step: 0.1
           unit_of_measurement: "°F"
+    outdoor_temperature_sensor:
+      name: Outdoor Temperature Sensor
+      description: Optional outdoor temperature sensor entity (e.g., sensor.outdoor_temp). If not provided or unavailable, the ON condition is always allowed.
+      default: {}
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
 
 trigger:
   - platform: numeric_state
