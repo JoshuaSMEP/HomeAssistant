@@ -1,14 +1,14 @@
 blueprint:
-  name: Room Temperature Control
+  name: Room Temperature Control (with Outdoor Sensor)
   description: |
-    Control a smart plug switch based on temperature sensor readings.
-    - Turns switch ON when temperature > High Threshold.
-    - Turns switch OFF when temperature < Low Threshold.
+    Control a smart plug switch based on indoor temperature sensor readings.
+    - Turns switch ON when indoor temperature > High Threshold (only if outdoor ≤ Low Threshold or no outdoor sensor).
+    - Turns switch OFF when indoor temperature < Low Threshold.
   domain: automation
   input:
     temperature_sensor:
-      name: Temperature Sensor
-      description: The temperature sensor entity (e.g., sensor.living_room_temp).
+      name: Indoor Temperature Sensor
+      description: The indoor temperature sensor entity (e.g., sensor.living_room_temp).
       selector:
         entity:
           domain: sensor
@@ -21,7 +21,7 @@ blueprint:
           domain: switch
     high_temperature:
       name: High Temperature Threshold
-      description: Temperature above which the switch turns ON (e.g., 75.5).
+      description: Indoor temperature above which the switch attempts to turn ON (e.g., 75.5).
       default: 75.5
       selector:
         number:
@@ -31,7 +31,7 @@ blueprint:
           unit_of_measurement: "°F"
     low_temperature:
       name: Low Temperature Threshold
-      description: Temperature below which the switch turns OFF (e.g., 74).
+      description: Indoor temperature below which the switch turns OFF; also used to check if outdoor ≤ this value before turning ON (e.g., 74).
       default: 74
       selector:
         number:
@@ -39,6 +39,13 @@ blueprint:
           max: 100
           step: 0.1
           unit_of_measurement: "°F"
+    outdoor_temperature_sensor:
+      name: Outdoor Temperature Sensor (Optional)
+      description: Optional outdoor sensor; if provided, switch only turns ON if its reading ≤ Low Threshold.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
 
 trigger:
   - platform: numeric_state
@@ -54,13 +61,24 @@ condition: []
 
 action:
   - choose:
+      # Handle turn_on trigger
       - conditions:
           - condition: trigger
             id: turn_on
         sequence:
+          # Condition: Allow ON only if no outdoor sensor or outdoor <= low_threshold
+          - condition: template
+            value_template: >-
+              {% set outdoor = !input outdoor_temperature_sensor %}
+              {% if outdoor == none or outdoor == '' or is_state(outdoor, 'unavailable') %}
+                true
+              {% else %}
+                (states(outdoor) | float(-999) <= !input low_temperature)
+              {% endif %}
           - service: switch.turn_on
             target:
               entity_id: !input switch_entity
+      # Handle turn_off trigger
       - conditions:
           - condition: trigger
             id: turn_off
