@@ -59,11 +59,13 @@ fields:
         domain: scene
 
 variables:
+  scene_one_entity: !input scene_one
+  scene_two_entity: !input scene_two
   other_scene: >-
-    {% if next_scene == !input scene_one %}
-      !input scene_two
+    {% if next_scene == scene_one_entity %}
+      {{ scene_two_entity }}
     {% else %}
-      !input scene_one
+      {{ scene_one_entity }}
     {% endif %}
 
 sequence:
@@ -79,6 +81,6 @@ sequence:
   - delay:
       seconds: !input dwell_time
   # Recurse with the other scene
-  - service: script.{{ id }}
+  - service: script.{{ this.id }}
     data:
       next_scene: "{{ other_scene }}"
