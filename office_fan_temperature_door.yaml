@@ -1,69 +1,70 @@
 blueprint:
-  name: Office Fan with Temperature and Door
+  name: Office Fan with Temperature and Door (°F)
   description: |
-    Turns on fan if inside temp > high threshold and outside temp <= inside temp. Turns off if inside temp < low threshold. Temporarily turns off fan if door opens (if on). Turns back on when door closes only if inside temp > high threshold and outside temp <= inside temp.
+    Turns on fan if inside temp > high threshold and outside temp ≤ inside temp.
+    Turns off if inside temp < low threshold.
+    Temporarily turns off fan when door opens; turns back on when door closes only if conditions are still met.
+    All temperatures in Fahrenheit.
   domain: automation
   input:
     fan_switch:
       name: Fan Switch
-      description: The switch controlling the fan.
       selector:
         entity:
           domain: switch
     inside_temp:
       name: Inside Temperature Sensor
-      description: The temperature sensor in the office (from motion sensor).
       selector:
         entity:
           domain: sensor
           device_class: temperature
     outside_temp:
       name: Outside Temperature Sensor
-      description: The temperature sensor on the door.
       selector:
         entity:
           domain: sensor
           device_class: temperature
     door_sensor:
       name: Door Sensor
-      description: The outside door open/close sensor.
       selector:
         entity:
           domain: binary_sensor
           device_class: opening
     high_threshold:
-      name: High Threshold (X1)
-      description: Turn fan on above this inside temp (if outside <= inside).
-      default: 25.0
+      name: High Threshold (turn fan ON above)
+      description: Inside temperature in °F
+      default: 77
       selector:
         number:
-          min: 0.0
-          max: 50.0
-          step: 0.1
-          unit_of_measurement: "°C"
+          min: 32
+          max: 120
+          step: 0.5
+          unit_of_measurement: °F
+          mode: box
     low_threshold:
-      name: Low Threshold (X2)
-      description: Turn fan off below this inside temp.
-      default: 20.0
+      name: Low Threshold (turn fan OFF below)
+      description: Inside temperature in °F
+      default: 70
       selector:
         number:
-          min: 0.0
-          max: 50.0
-          step: 0.1
-          unit_of_measurement: "°C"
+          min: 32
+          max: 120
+          step: 0.5
+          unit_of_measurement: °F
+          mode: box
 
 trigger:
-  - trigger: state
+  - platform: state
     entity_id:
       - !input inside_temp
       - !input outside_temp
     id: temp_change
-  - trigger: state
+  - platform: state
     entity_id: !input door_sensor
     from: "off"
     to: "on"
     id: door_open
-  - trigger: state
+  - platform: state
     entity_id: !input door_sensor
     from: "on"
     to: "off"
@@ -74,16 +75,19 @@ max_exceeded: silent
 
 action:
   - choose:
+      # Temperature changed
       - conditions:
           - condition: trigger
             id: temp_change
         sequence:
-          - variables:
-              inside: "{{ states(!input 'inside_temp') | float(0) }}"
-              outside: "{{ states(!input 'outside_temp') | float(0) }}"
+          # Turn ON if inside > high AND outside ≤ inside AND fan currently off
           - if:
-              - "{{ inside > (!input 'high_threshold') | float(0) }}"
-              - "{{ outside <= inside }}"
+              - condition: numeric_state
+                entity_id: !input inside_temp
+                above: !input high_threshold
+              - condition: template
+                value_template: >-
+                  {{ states(!input 'outside_temp') | float(-999) <= states(!input 'inside_temp') | float(-999) }}
               - condition: state
                 entity_id: !input fan_switch
                 state: "off"
@@ -91,8 +95,12 @@ action:
               - service: switch.turn_on
                 target:
                   entity_id: !input fan_switch
+
+          # Turn OFF if inside < low AND fan currently on
           - if:
-              - "{{ inside < (!input 'low_threshold') | float(0) }}"
+              - condition: numeric_state
+                entity_id: !input inside_temp
+                below: !input low_threshold
               - condition: state
                 entity_id: !input fan_switch
                 state: "on"
@@ -100,6 +108,8 @@ action:
               - service: switch.turn_off
                 target:
                   entity_id: !input fan_switch
+
+      # Door opened → force fan off
       - conditions:
           - condition: trigger
             id: door_open
@@ -112,16 +122,19 @@ action:
               - service: switch.turn_off
                 target:
                   entity_id: !input fan_switch
+
+      # Door closed → turn fan back on only if conditions still met
       - conditions:
           - condition: trigger
             id: door_close
         sequence:
-          - variables:
-              inside: "{{ states(!input 'inside_temp') | float(0) }}"
-              outside: "{{ states(!input 'outside_temp') | float(0) }}"
           - if:
-              - "{{ inside > (!input 'high_threshold') | float(0) }}"
-              - "{{ outside <= inside }}"
+              - condition: numeric_state
+                entity_id: !input inside_temp
+                above: !input high_threshold
+              - condition: template
+                value_template: >-
+                  {{ states(!input 'outside_temp') | float(-999) <= states(!input 'inside_temp') | float(-999) }}
               - condition: state
                 entity_id: !input fan_switch
                 state: "off"
