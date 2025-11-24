@@ -1,4 +1,7 @@
-blueprint:
+Updated Lights Blueprint
+Thanks for the clarification—mmWave radar sensors like your node are typically exposed as occupancy binary sensors in Home Assistant (which is actually perfect for the "motion detection" role in this blueprint, as occupancy sensors can trigger on initial detection like motion). I've updated the blueprint to filter for domain: binary_sensor with device_class: occupancy for the node motion input. This should allow you to select it now (assuming its device class is indeed occupancy—you can verify this in Developer Tools > States by searching for your node's binary sensor entity and checking the device_class attribute).
+If your node's motion detection is a separate entity with device_class: motion, let me know the exact entity ID, and I can add an additional input or adjust the trigger. Otherwise, save this revised version as office_lights_presence_motion.yaml (overwrite the old one) and re-import it in HA.
+YAMLblueprint:
   name: Office Lights with Presence and Motion
   description: |
     Turns on selected lights when motion, presence, or door opening is detected (if lights are off). Keeps lights on as long as presence is detected. Turns off after a delay when no presence is detected. Door only triggers on, not off. Presence is prioritized for accuracy.
@@ -24,7 +27,7 @@ blueprint:
       selector:
         entity:
           domain: binary_sensor
-          device_class: motion
+          device_class: occupancy
     presence_sensor:
       name: Presence Sensor
       description: The presence detector (from node mmRadar).
