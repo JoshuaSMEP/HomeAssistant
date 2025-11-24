@@ -1,119 +1,116 @@
-Updated Lights Blueprint
-Thanks for the clarification—mmWave radar sensors like your node are typically exposed as occupancy binary sensors in Home Assistant (which is actually perfect for the "motion detection" role in this blueprint, as occupancy sensors can trigger on initial detection like motion). I've updated the blueprint to filter for domain: binary_sensor with device_class: occupancy for the node motion input. This should allow you to select it now (assuming its device class is indeed occupancy—you can verify this in Developer Tools > States by searching for your node's binary sensor entity and checking the device_class attribute).
-If your node's motion detection is a separate entity with device_class: motion, let me know the exact entity ID, and I can add an additional input or adjust the trigger. Otherwise, save this revised version as office_lights_presence_motion.yaml (overwrite the old one) and re-import it in HA.
-YAMLblueprint:
-  name: Office Lights with Presence and Motion
-  description: |
-    Turns on selected lights when motion, presence, or door opening is detected (if lights are off). Keeps lights on as long as presence is detected. Turns off after a delay when no presence is detected. Door only triggers on, not off. Presence is prioritized for accuracy.
+blueprint:
+  name: Office Lights with Presence and Motion (mmWave fix)
+  description: >-
+    Turns lights on when motion, mmWave occupancy, or door opens. Keeps lights on while presence/occupancy is detected.
+    Uses a timer to turn off after configurable delay when presence is gone.
+    Door only triggers ON, never OFF. mmWave sensor uses occupancy class.
   domain: automation
   input:
     light_target:
       name: Lights
-      description: The lights to control (select multiple if needed).
       selector:
         target:
           entity:
             domain: light
     office_motion:
-      name: Office Motion Sensor
-      description: The office motion sensor (motion + temp + lux).
+      name: Office Motion Sensor (PIR)
       selector:
         entity:
           domain: binary_sensor
           device_class: motion
-    node_motion:
-      name: Node Motion Sensor
-      description: The node motion sensor (motion + lux + presence mmRadar).
+    node_occupancy:
+      name: mmWave Node Occupancy Sensor
+      description: The mmWave radar sensor (usually device_class = occupancy)
       selector:
         entity:
           domain: binary_sensor
           device_class: occupancy
     presence_sensor:
-      name: Presence Sensor
-      description: The presence detector (from node mmRadar).
+      name: Presence / Occupancy Sensor (most accurate)
+      description: Usually the same mmWave entity or a separate occupancy entity
       selector:
         entity:
           domain: binary_sensor
           device_class: occupancy
     door_sensor:
-      name: Door Sensor
-      description: The outside door sensor (open/close + temp).
+      name: Office Door Sensor
       selector:
         entity:
           domain: binary_sensor
           device_class: opening
-    motion_delay:
-      name: Initial On Time
-      description: How long to keep lights on after trigger if no presence is detected.
+    motion_on_delay:
+      name: Lights-on time when only motion (no presence)
+      description: Time to keep lights on if presence was never detected
       default: "00:05:00"
       selector:
         time:
-    presence_delay:
-      name: No Presence Delay
-      description: How long after no presence detected before turning off lights.
+    no_presence_delay:
+      name: Lights-off delay after no presence
+      description: Time to wait after presence goes OFF before turning lights off
       default: "00:02:00"
       selector:
         time:
     no_presence_timer:
-      name: No Presence Timer
-      description: Select the timer helper you created for tracking no-presence delays.
+      name: Timer Helper
+      description: Create a Timer helper first (no duration needed)
       selector:
         entity:
           domain: timer
 
 trigger:
-  - trigger: state
+  - platform: state
     entity_id: !input office_motion
     from: "off"
     to: "on"
-    id: motion_office
-  - trigger: state
-    entity_id: !input node_motion
+    id: pir_motion
+  - platform: state
+    entity_id: !input node_occupancy
     from: "off"
     to: "on"
-    id: motion_node
-  - trigger: state
+    id: mmwave_motion
+  - platform: state
     entity_id: !input door_sensor
     from: "off"
     to: "on"
     id: door_open
-  - trigger: state
+  - platform: state
     entity_id: !input presence_sensor
-    from: "off"
     to: "on"
     id: presence_on
-  - trigger: state
+  - platform: state
     entity_id: !input presence_sensor
-    from: "on"
     to: "off"
     id: presence_off
-  - trigger: event
+  - platform: event
     event_type: timer.finished
     event_data:
       entity_id: !input no_presence_timer
-    id: timer_finish
+    id: timer_done
 
 mode: restart
 max_exceeded: silent
 
 action:
   - choose:
+      # Any motion or door opening → turn lights on (only if currently off)
       - conditions:
           - condition: or
             conditions:
               - condition: trigger
-                id: motion_office
+                id: pir_motion
               - condition: trigger
-                id: motion_node
+                id: mmwave_motion
               - condition: trigger
                 id: door_open
         sequence:
           - if:
               - condition: template
-                value_template: "{{ expand(!input 'light_target') | selectattr('state', 'eq', 'off') | list | count == expand(!input 'light_target') | list | count }}"
+                value_template: >-
+                  {{ expand(!input light_target) | selectattr('state','eq','off') | list | count > 0 }}
             then:
               - service: light.turn_on
                 target: !input light_target
+              # If presence is NOT active right now, start the short motion timer
               - if:
                   - condition: state
                     entity_id: !input presence_sensor
@@ -121,38 +118,30 @@ action:
                 then:
                   - service: timer.start
                     data:
-                      duration: !input motion_delay
+                      duration: !input motion_on_delay
                     target:
                       entity_id: !input no_presence_timer
-      - conditions:
-          - condition: trigger
-            id: presence_on
+
+      # Presence detected → turn on lights and cancel any running timer
+      - conditions: "{{ trigger.id == 'presence_on' }}"
         sequence:
-          - if:
-              - condition: template
-                value_template: "{{ expand(!input 'light_target') | selectattr('state', 'eq', 'off') | list | count == expand(!input 'light_target') | list | count }}"
-            then:
-              - service: light.turn_on
-                target: !input light_target
+          - service: light.turn_on
+            target: !input light_target
           - service: timer.cancel
             target:
               entity_id: !input no_presence_timer
-      - conditions:
-          - condition: trigger
-            id: presence_off
+
+      # Presence gone → start the longer no-presence timer
+      - conditions: "{{ trigger.id == 'presence_off' }}"
         sequence:
-          - if:
-              - condition: template
-                value_template: "{{ expand(!input 'light_target') | selectattr('state', 'eq', 'on') | list | count > 0 }}"
-            then:
-              - service: timer.start
-                data:
-                  duration: !input presence_delay
-                target:
-                  entity_id: !input no_presence_timer
-      - conditions:
-          - condition: trigger
-            id: timer_finish
+          - service: timer.start
+            data:
+              duration: !input no_presence_delay
+            target:
+              entity_id: !input no_presence_timer
+
+      # Timer finished → lights off
+      - conditions: "{{ trigger.id == 'timer_done' }}"
         sequence:
           - service: light.turn_off
             target: !input light_target
