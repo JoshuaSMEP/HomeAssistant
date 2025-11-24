@@ -1,0 +1,155 @@
+blueprint:
+  name: Office Lights with Presence and Motion
+  description: |
+    Turns on selected lights when motion, presence, or door opening is detected (if lights are off). Keeps lights on as long as presence is detected. Turns off after a delay when no presence is detected. Door only triggers on, not off. Presence is prioritized for accuracy.
+  domain: automation
+  input:
+    light_target:
+      name: Lights
+      description: The lights to control (select multiple if needed).
+      selector:
+        target:
+          entity:
+            domain: light
+    office_motion:
+      name: Office Motion Sensor
+      description: The office motion sensor (motion + temp + lux).
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: motion
+    node_motion:
+      name: Node Motion Sensor
+      description: The node motion sensor (motion + lux + presence mmRadar).
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: motion
+    presence_sensor:
+      name: Presence Sensor
+      description: The presence detector (from node mmRadar).
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: occupancy
+    door_sensor:
+      name: Door Sensor
+      description: The outside door sensor (open/close + temp).
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: opening
+    motion_delay:
+      name: Initial On Time
+      description: How long to keep lights on after trigger if no presence is detected.
+      default: "00:05:00"
+      selector:
+        time:
+    presence_delay:
+      name: No Presence Delay
+      description: How long after no presence detected before turning off lights.
+      default: "00:02:00"
+      selector:
+        time:
+    no_presence_timer:
+      name: No Presence Timer
+      description: Select the timer helper you created for tracking no-presence delays.
+      selector:
+        entity:
+          domain: timer
+
+trigger:
+  - trigger: state
+    entity_id: !input office_motion
+    from: "off"
+    to: "on"
+    id: motion_office
+  - trigger: state
+    entity_id: !input node_motion
+    from: "off"
+    to: "on"
+    id: motion_node
+  - trigger: state
+    entity_id: !input door_sensor
+    from: "off"
+    to: "on"
+    id: door_open
+  - trigger: state
+    entity_id: !input presence_sensor
+    from: "off"
+    to: "on"
+    id: presence_on
+  - trigger: state
+    entity_id: !input presence_sensor
+    from: "on"
+    to: "off"
+    id: presence_off
+  - trigger: event
+    event_type: timer.finished
+    event_data:
+      entity_id: !input no_presence_timer
+    id: timer_finish
+
+mode: restart
+max_exceeded: silent
+
+action:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: motion_office
+              - condition: trigger
+                id: motion_node
+              - condition: trigger
+                id: door_open
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ expand(!input 'light_target') | selectattr('state', 'eq', 'off') | list | count == expand(!input 'light_target') | list | count }}"
+            then:
+              - service: light.turn_on
+                target: !input light_target
+              - if:
+                  - condition: state
+                    entity_id: !input presence_sensor
+                    state: "off"
+                then:
+                  - service: timer.start
+                    data:
+                      duration: !input motion_delay
+                    target:
+                      entity_id: !input no_presence_timer
+      - conditions:
+          - condition: trigger
+            id: presence_on
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ expand(!input 'light_target') | selectattr('state', 'eq', 'off') | list | count == expand(!input 'light_target') | list | count }}"
+            then:
+              - service: light.turn_on
+                target: !input light_target
+          - service: timer.cancel
+            target:
+              entity_id: !input no_presence_timer
+      - conditions:
+          - condition: trigger
+            id: presence_off
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ expand(!input 'light_target') | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+            then:
+              - service: timer.start
+                data:
+                  duration: !input presence_delay
+                target:
+                  entity_id: !input no_presence_timer
+      - conditions:
+          - condition: trigger
+            id: timer_finish
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
