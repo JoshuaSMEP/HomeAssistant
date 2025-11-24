@@ -112,9 +112,9 @@ action:
                 id: door_open
         sequence:
           - if:
-              - condition: template
-                value_template: >-
-                  {{ expand(!input 'light_target') | selectattr('state','eq','off') | list | count == expand(!input 'light_target') | list | count }}
+              - condition: state
+                entity_id: !input light_target
+                state: "off"
             then:
               - service: light.turn_on
                 target: !input light_target
@@ -134,9 +134,9 @@ action:
       - conditions: "{{ trigger.id == 'presence_on' }}"
         sequence:
           - if:
-              - condition: template
-                value_template: >-
-                  {{ expand(!input 'light_target') | selectattr('state','eq','off') | list | count == expand(!input 'light_target') | list | count }}
+              - condition: state
+                entity_id: !input light_target
+                state: "off"
             then:
               - service: light.turn_on
                 target: !input light_target
@@ -144,13 +144,14 @@ action:
             target:
               entity_id: !input no_presence_timer
 
-      # Presence gone → start the no-presence timer (only if any lights are on)
+      # Presence gone → start the no-presence timer (only if not all lights are off, i.e., at least one is on)
       - conditions: "{{ trigger.id == 'presence_off' }}"
         sequence:
           - if:
-              - condition: template
-                value_template: >-
-                  {{ expand(!input 'light_target') | selectattr('state','eq','on') | list | count > 0 }}
+              - not:
+                  - condition: state
+                    entity_id: !input light_target
+                    state: "off"
             then:
               - service: timer.start
                 data:
@@ -162,4 +163,3 @@ action:
       - conditions: "{{ trigger.id == 'timer_done' }}"
         sequence:
           - service: light.turn_off
-            target: !input light_target
