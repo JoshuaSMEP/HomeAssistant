@@ -1,0 +1,131 @@
+blueprint:
+  name: Office Fan with Temperature and Door
+  description: |
+    Turns on fan if inside temp > high threshold and outside temp <= inside temp. Turns off if inside temp < low threshold. Temporarily turns off fan if door opens (if on). Turns back on when door closes only if inside temp > high threshold and outside temp <= inside temp.
+  domain: automation
+  input:
+    fan_switch:
+      name: Fan Switch
+      description: The switch controlling the fan.
+      selector:
+        entity:
+          domain: switch
+    inside_temp:
+      name: Inside Temperature Sensor
+      description: The temperature sensor in the office (from motion sensor).
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    outside_temp:
+      name: Outside Temperature Sensor
+      description: The temperature sensor on the door.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    door_sensor:
+      name: Door Sensor
+      description: The outside door open/close sensor.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: opening
+    high_threshold:
+      name: High Threshold (X1)
+      description: Turn fan on above this inside temp (if outside <= inside).
+      default: 25.0
+      selector:
+        number:
+          min: 0.0
+          max: 50.0
+          step: 0.1
+          unit_of_measurement: "°C"
+    low_threshold:
+      name: Low Threshold (X2)
+      description: Turn fan off below this inside temp.
+      default: 20.0
+      selector:
+        number:
+          min: 0.0
+          max: 50.0
+          step: 0.1
+          unit_of_measurement: "°C"
+
+trigger:
+  - trigger: state
+    entity_id:
+      - !input inside_temp
+      - !input outside_temp
+    id: temp_change
+  - trigger: state
+    entity_id: !input door_sensor
+    from: "off"
+    to: "on"
+    id: door_open
+  - trigger: state
+    entity_id: !input door_sensor
+    from: "on"
+    to: "off"
+    id: door_close
+
+mode: queued
+max_exceeded: silent
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: temp_change
+        sequence:
+          - variables:
+              inside: "{{ states(!input 'inside_temp') | float(0) }}"
+              outside: "{{ states(!input 'outside_temp') | float(0) }}"
+          - if:
+              - "{{ inside > (!input 'high_threshold') | float(0) }}"
+              - "{{ outside <= inside }}"
+              - condition: state
+                entity_id: !input fan_switch
+                state: "off"
+            then:
+              - service: switch.turn_on
+                target:
+                  entity_id: !input fan_switch
+          - if:
+              - "{{ inside < (!input 'low_threshold') | float(0) }}"
+              - condition: state
+                entity_id: !input fan_switch
+                state: "on"
+            then:
+              - service: switch.turn_off
+                target:
+                  entity_id: !input fan_switch
+      - conditions:
+          - condition: trigger
+            id: door_open
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input fan_switch
+                state: "on"
+            then:
+              - service: switch.turn_off
+                target:
+                  entity_id: !input fan_switch
+      - conditions:
+          - condition: trigger
+            id: door_close
+        sequence:
+          - variables:
+              inside: "{{ states(!input 'inside_temp') | float(0) }}"
+              outside: "{{ states(!input 'outside_temp') | float(0) }}"
+          - if:
+              - "{{ inside > (!input 'high_threshold') | float(0) }}"
+              - "{{ outside <= inside }}"
+              - condition: state
+                entity_id: !input fan_switch
+                state: "off"
+            then:
+              - service: switch.turn_on
+                target:
+                  entity_id: !input fan_switch
