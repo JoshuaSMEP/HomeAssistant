@@ -74,6 +74,9 @@ mode: queued
 max_exceeded: silent
 
 action:
+  - variables:
+      inside_temp_id: !input inside_temp
+      outside_temp_id: !input outside_temp
   - choose:
       # Temperature changed
       - conditions:
@@ -87,7 +90,7 @@ action:
                 above: !input high_threshold
               - condition: template
                 value_template: >-
-                  {{ states(!input 'outside_temp') | float(-999) <= states(!input 'inside_temp') | float(-999) }}
+                  {{ states(outside_temp_id) | float(-999) <= states(inside_temp_id) | float(-999) }}
               - condition: state
                 entity_id: !input fan_switch
                 state: "off"
@@ -134,7 +137,7 @@ action:
                 above: !input high_threshold
               - condition: template
                 value_template: >-
-                  {{ states(!input 'outside_temp') | float(-999) <= states(!input 'inside_temp') | float(-999) }}
+                  {{ states(outside_temp_id) | float(-999) <= states(inside_temp_id) | float(-999) }}
               - condition: state
                 entity_id: !input fan_switch
                 state: "off"
