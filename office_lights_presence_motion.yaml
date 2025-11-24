@@ -1,14 +1,14 @@
 blueprint:
   name: Office Lights with Presence and Motion (mmWave fix)
   description: >-
-    Turns lights on when motion, mmWave occupancy, or door opens (only if all lights are off). Keeps lights on while presence/occupancy is detected.
+    Turns lights on when motion, mmWave occupancy, or door opens (only if all selected lights are off). Keeps lights on while presence/occupancy is detected.
     Uses a timer to turn off after configurable delay when presence is gone.
     Door only triggers ON, never OFF. mmWave sensor uses occupancy class.
   domain: automation
   input:
     light_entities:
       name: Lights
-      description: Select multiple lights if needed.
+      description: Select one or more lights to control. Make sure to select all desired lights when creating the automation.
       selector:
         entity:
           domain: light
@@ -133,7 +133,9 @@ action:
                       entity_id: !input no_presence_timer
 
       # Presence detected → turn on lights (only if all off) and cancel any running timer
-      - conditions: "{{ trigger.id == 'presence_on' }}"
+      - conditions:
+          - condition: trigger
+            id: presence_on
         sequence:
           - if:
               - condition: state
@@ -148,7 +150,9 @@ action:
               entity_id: !input no_presence_timer
 
       # Presence gone → start the no-presence timer (only if not all lights are off, i.e., at least one is on)
-      - conditions: "{{ trigger.id == 'presence_off' }}"
+      - conditions:
+          - condition: trigger
+            id: presence_off
         sequence:
           - if:
               - not:
@@ -163,7 +167,9 @@ action:
                   entity_id: !input no_presence_timer
 
       # Timer finished → lights off
-      - conditions: "{{ trigger.id == 'timer_done' }}"
+      - conditions:
+          - condition: trigger
+            id: timer_done
         sequence:
           - service: light.turn_off
             target:
